@@ -1,0 +1,11 @@
+# built binaries
+/housepage
+/housepaged
+/bin/
+
+# local data: databases and published sites
+/data/
+*.db
+*.db-*
+
+.DS_Store

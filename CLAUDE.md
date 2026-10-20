@@ -2,14 +2,12 @@
 
 A personal playground for publishing static sites and PWAs. A site claims a name and is served at `NAME.<domain>`. Coding agents publish with a CLI that a skill teaches them to use. A site can keep small shared JSON data (key-value and collections) that its own page reads and writes. Inspired by Shopify's "quick" (shopify.engineering/quick). A standalone project.
 
-> **Resuming work? Read `HANDOFF.md` first.** It records the working agreement with the user and how the build went (all 15 modules of `site-data_plan.md` are done).
-
 ## How to work with this user
 
 - **Do not make design decisions or unrequested changes.** Propose, get a yes, then build. This went wrong once already: an installer, Go changes and a config redesign were made unasked and had to be reverted. When a request is ambiguous, restate your understanding and confirm before coding.
 - **Never commit or push unless asked.** "Commit" does not mean "push".
 - Keep it simple: v0 first. Mark deliberate shortcuts with a `// ponytail:` comment naming the ceiling and the upgrade path.
-- The user knows Java and is new to Go. Explain Go idioms briefly when you introduce them. A private reading guide exists as an artifact ("Housepage Code Tour": https://claude.ai/artifact/Pcy77251F571bh5nwTNjiy). It mirrors the Go code as of commit `4f7f220` and goes stale if the code changes.
+- The user knows Java and is new to Go. Explain Go idioms briefly when you introduce them. A private reading guide exists as an artifact ("Housepage Code Tour": https://claude.ai/artifact/Pcy77251F571bh5nwTNjiy). It mirrors the Go code as of commit `4f7f220` and is **out of date**: it predates users, tokens, migrations and the site data store.
 - Prefer tables and diagrams over paragraphs when explaining.
 
 ## Architecture
@@ -71,7 +69,6 @@ go build -o bin/housepage  ./cmd/housepage
 | Raspberry Pi hosting (Linux path of `run.sh`) |
 | Skill and sample page: add `<link rel="apple-touch-icon">` and a favicon (iOS probes `/apple-touch-icon.png` and 404s) |
 | nginx access log has no timestamps; add `$time_local` to `log_format` |
-| Choose a licence (the repo is public and has none) |
 
 Ideas the user has not asked for yet, so do not build unprompted: atomic publish via symlink swap (v0 is wipe-then-write), a dashboard on a separate registrable domain, zip upload, and the data store's future work listed in `site-data_plan.md` (`increment` and `merge` updates, indexes, per-collection access rules, private reads, realtime, per-site rate limits).
 
@@ -85,6 +82,10 @@ Ideas the user has not asked for yet, so do not build unprompted: atomic publish
 - macOS ships bash 3.2: no namerefs or associative arrays in the scripts.
 - Safety: all hostnames and paths are constrained to `[a-z0-9-]` and relative segments before they reach the filesystem, in the nginx regex and in `rules`. Keep both.
 - A cookie or origin concern remains: sites are siblings on one domain. A future dashboard should live on a different registrable domain.
+
+## Licence
+
+MIT (`LICENSE`).
 
 ## Outside the repo
 

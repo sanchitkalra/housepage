@@ -45,6 +45,8 @@ func TestDBConfigSendsOnlyTheFlagsGiven(t *testing.T) {
 		{[]string{"tip", "--mode", "open"}, `{"mode":"open"}`},
 		{[]string{"tip", "--max-docs", "1000"}, `{"maxDocs":1000}`},
 		{[]string{"tip", "--max-docs", "0"}, `{"maxDocs":0}`}, // an explicit zero is a value, not "not given"
+		{[]string{"tip", "--max-docs", "default"}, `{"maxDocs":null}`},
+		{[]string{"tip", "--max-collections=default", "--max-doc-size", "default", "--mode", "off"}, `{"maxCollections":null,"maxDocSize":null,"mode":"off"}`},
 		{[]string{"tip", "--mode=owner", "--max-collections=3", "--max-doc-size=100"}, `{"maxCollections":3,"maxDocSize":100,"mode":"owner"}`},
 	}
 	for _, c := range cases {
@@ -80,7 +82,9 @@ func TestDBConfigRefusesBadInputWithoutAskingTheServer(t *testing.T) {
 		{"doc size above ceiling", []string{"tip", "--max-doc-size", "5000"}, "ceiling of 4096"},
 		{"negative", []string{"tip", "--max-docs", "-1"}, "maxDocs"},
 		{"doc size zero", []string{"tip", "--max-doc-size", "0"}, "maxDocSize"},
-		{"not a number", []string{"tip", "--max-docs", "many"}, "invalid value"},
+		{"not a number", []string{"tip", "--max-docs", "many"}, `--max-docs must be a whole number or default; got "many"`},
+		{"empty value", []string{"tip", "--max-docs", ""}, "whole number or default"},
+		{"default in the wrong case", []string{"tip", "--max-docs", "Default"}, "whole number or default"},
 		{"unknown flag", []string{"tip", "--max-bananas", "1"}, "not defined"},
 	}
 	for _, c := range cases {

@@ -8,12 +8,13 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 
 	"housepage/internal/rules"
 )
 
 const dbUsage = `usage:
-  housepage db config <site> [--mode off|open|owner] [--max-collections N] [--max-docs N] [--max-doc-size N]
+  housepage db config <site> [--mode off|open|owner] [--max-collections N|default] [--max-docs N|default] [--max-doc-size N|default]
   housepage db show <site>`
 
 func dbCmd(args []string) error {
@@ -99,7 +100,7 @@ func dbShow(args []string) error {
 // dbConfig sends only the flags that were given, so the rest of the site's settings stay as they are.
 // The site comes first, because Go's flag parsing stops at the first argument that is not a flag.
 func dbConfig(args []string) error {
-	const use = "usage: housepage db config <site> [--mode off|open|owner] [--max-collections N] [--max-docs N] [--max-doc-size N]"
+	const use = "usage: housepage db config <site> [--mode off|open|owner] [--max-collections N|default] [--max-docs N|default] [--max-doc-size N|default]"
 	if len(args) == 0 || len(args[0]) > 0 && args[0][0] == '-' {
 		return errors.New(use)
 	}
@@ -107,9 +108,9 @@ func dbConfig(args []string) error {
 	flags := flag.NewFlagSet("db config", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	mode := flags.String("mode", "", "who may use the site's data from its pages: off, open (read and write) or owner (read only)")
-	maxCollections := flags.Int("max-collections", 0, "collections the site may hold")
-	maxDocs := flags.Int("max-docs", 0, "documents per collection, and key-value entries")
-	maxDocSize := flags.Int("max-doc-size", 0, "bytes per document or value")
+	maxCollections := flags.String("max-collections", "", "collections the site may hold, or default")
+	maxDocs := flags.String("max-docs", "", "documents per collection, and key-value entries, or default")
+	maxDocSize := flags.String("max-doc-size", "", "bytes per document or value, or default")
 	if err := flags.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -120,30 +121,44 @@ func dbConfig(args []string) error {
 		return err
 	}
 	body := map[string]any{}
+	var bad error
+	// A limit is a whole number, or "default", which is sent as null to restore the server's default.
+	limit := func(name, field, raw string, check func(int) error) {
+		if raw == "default" {
+			body[field] = nil
+			return
+		}
+		n, err := strconv.Atoi(raw)
+		if err != nil {
+			bad = fmt.Errorf("--%s must be a whole number or default; got %q", name, raw)
+			return
+		}
+		if err := check(n); err != nil {
+			bad = err
+			return
+		}
+		body[field] = n
+	}
 	flags.Visit(func(f *flag.Flag) {
 		switch f.Name {
 		case "mode":
 			body["mode"] = *mode
 		case "max-collections":
-			body["maxCollections"] = *maxCollections
+			limit(f.Name, "maxCollections", *maxCollections, rules.CheckMaxCollections)
 		case "max-docs":
-			body["maxDocs"] = *maxDocs
+			limit(f.Name, "maxDocs", *maxDocs, rules.CheckMaxDocs)
 		case "max-doc-size":
-			body["maxDocSize"] = *maxDocSize
+			limit(f.Name, "maxDocSize", *maxDocSize, rules.CheckMaxDocSize)
 		}
 	})
+	if bad != nil {
+		return bad
+	}
 	if len(body) == 0 {
 		return errors.New("nothing to change; give at least one flag\n" + use)
 	}
 	if m, ok := body["mode"].(string); ok && m != "off" && m != "open" && m != "owner" {
 		return fmt.Errorf("invalid mode %q: use off, open or owner", m)
-	}
-	for name, check := range map[string]func(int) error{"maxCollections": rules.CheckMaxCollections, "maxDocs": rules.CheckMaxDocs, "maxDocSize": rules.CheckMaxDocSize} {
-		if n, ok := body[name].(int); ok {
-			if err := check(n); err != nil {
-				return err
-			}
-		}
 	}
 	payload, _ := json.Marshal(body)
 	s, err := fetchSettings("PUT", site, payload)

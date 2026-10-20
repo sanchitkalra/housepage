@@ -64,7 +64,7 @@ A published site can keep data that its own page reads and writes with `fetch('/
 
 ```bash
 housepage db config my-site --mode open       # visitors read and write; "owner" = visitors read only
-housepage db config my-site --max-docs 2000   # flags change only what is given
+housepage db config my-site --max-docs 2000   # flags change only what is given; "default" restores a limit
 housepage db show my-site                     # mode, limits, ceilings and usage
 ```
 
@@ -135,6 +135,10 @@ shutdown.sh        stop the three services
 - Listing sorted by a field reads the whole collection each time (about 20 to 30 ms at 20,000 documents); there are no indexes in v0.
 - Every site shares the parent domain, so keep any future dashboard on a separate registrable domain.
 - Published sites and their data (when enabled) are public.
+
+## Licence
+
+MIT, see `LICENSE`.
 
 ## Tests
 

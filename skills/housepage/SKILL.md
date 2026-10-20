@@ -54,7 +54,7 @@ A published site can keep small JSON data that its own page reads and writes wit
 | Visitors may read and write | `housepage db config <site> --mode open` |
 | Visitors may read only | `housepage db config <site> --mode owner` |
 | Show mode, limits and usage | `housepage db show <site>` |
-| Raise a limit (flags change only what is given) | `housepage db config <site> --max-docs 2000` (also `--max-collections`, `--max-doc-size`) |
+| Raise a limit (flags change only what is given) | `housepage db config <site> --max-docs 2000` (also `--max-collections`, `--max-doc-size`; the value `default` restores the default) |
 
 `--mode open` means **anyone with the URL can add, change and delete the data**. **Stop and ask first**: do not run `--mode open` until the user has said yes in this conversation, even if the page cannot work without it. Publish, explain what open mode allows, ask, and enable it only after the answer. Never store secrets or personal data. `--mode owner` lets visitors read but not write; there is no command to write data yourself, so use it only for data that is already there.
 

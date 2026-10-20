@@ -132,6 +132,13 @@ http {
     limit_req_zone $binary_remote_addr zone=api:10m rate=30r/m;
     limit_req_status 429;
 
+    # request limits for site data, per visitor. Reads and writes get separate zones: the key is empty
+    # (not counted) for the other kind of request.
+    map $request_method $read_key  { default $binary_remote_addr; POST ""; PUT ""; DELETE ""; }
+    map $request_method $write_key { default ""; POST $binary_remote_addr; PUT $binary_remote_addr; DELETE $binary_remote_addr; }
+    limit_req_zone $read_key zone=data_reads:10m rate=20r/s;
+    limit_req_zone $write_key zone=data_writes:10m rate=2r/s;
+
     # anything that matches nothing else
     server {
         listen 127.0.0.1:@NGINX_PORT@ default_server;
@@ -161,6 +168,24 @@ http {
         root @DATA@/sites/$page;
         index index.html;
         add_header Cache-Control "no-cache" always;
+        set_real_ip_from 127.0.0.1;
+        real_ip_header CF-Connecting-IP;
+
+        # site data: the page's own fetch('/_api/...'). housepaged learns which site this is from the header
+        # below, which replaces anything the visitor sent. It is not proxied on app.@DOMAIN@, so it cannot be forged.
+        location /_api/ {
+            limit_req zone=data_reads burst=40 nodelay;
+            limit_req zone=data_writes burst=10 nodelay;
+            client_max_body_size 16k;
+            error_page 429 = @rate_limited;
+            proxy_pass http://127.0.0.1:@API_PORT@;
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Housepage-Site $page;
+        }
+        location @rate_limited {
+            default_type application/json;
+            return 429 '{"error":"rate_limited","message":"too many requests; slow down and try again"}';
+        }
     }
 }
 EOF

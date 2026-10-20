@@ -98,3 +98,9 @@ func releaseSite(db *sql.DB, name string) error {
 	_, err := db.Exec(`DELETE FROM sites WHERE name = ?`, name)
 	return err
 }
+
+func countSites(db *sql.DB, userID int64) (int, error) {
+	var n int
+	err := db.QueryRow(`SELECT count(*) FROM sites WHERE owner_id = ?`, userID).Scan(&n)
+	return n, err
+}

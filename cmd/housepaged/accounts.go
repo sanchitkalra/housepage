@@ -126,10 +126,21 @@ func createUser(db *sql.DB, name string, superuser bool) (user, string, error) {
 // mintToken adds a labelled token for a user and returns its plaintext once. Whether the caller
 // may do this is decided by the API layer; the database only refuses a superuser token for an ordinary user.
 func mintToken(db *sql.DB, userID int64, label string, superuser bool) (string, error) {
+	token, _, err := mintTokenInfo(db, userID, label, superuser)
+	return token, err
+}
+
+// mintTokenInfo is mintToken that also returns what a listing would show for the new token.
+func mintTokenInfo(db *sql.DB, userID int64, label string, superuser bool) (string, tokenInfo, error) {
 	if err := rules.ValidLabel(label); err != nil {
-		return "", err
+		return "", tokenInfo{}, err
 	}
-	return insertToken(db, userID, label, superuser, time.Now().UnixMilli())
+	now := time.Now().UnixMilli()
+	token, err := insertToken(db, userID, label, superuser, now)
+	if err != nil {
+		return "", tokenInfo{}, err
+	}
+	return token, tokenInfo{Label: label, IsSuperuser: superuser, CreatedAt: now}, nil
 }
 
 // lookupToken finds who a token belongs to, or returns errUnknownToken.

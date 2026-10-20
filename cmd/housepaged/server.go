@@ -28,6 +28,12 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("PUT /api/v1/sites/{name}", s.putSite)
 	mux.HandleFunc("GET /api/v1/sites", s.listSites)
 	mux.HandleFunc("DELETE /api/v1/sites/{name}", s.deleteSite)
+	mux.HandleFunc("POST /api/v1/users", s.postUser)
+	mux.HandleFunc("GET /api/v1/users/{name}", s.getUser)
+	mux.HandleFunc("PUT /api/v1/users/{name}", s.putUser)
+	mux.HandleFunc("POST /api/v1/tokens", s.postToken)
+	mux.HandleFunc("GET /api/v1/tokens", s.getTokens)
+	mux.HandleFunc("DELETE /api/v1/tokens/{label}", s.deleteToken)
 	return mux
 }
 
@@ -99,20 +105,43 @@ func (s *server) deleteSite(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{"deleted": name})
 }
 
+// callerFor identifies who a request's bearer token belongs to. A missing or unknown token is errUnknownToken.
+func (s *server) callerFor(r *http.Request) (caller, error) {
+	token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if !ok {
+		return caller{}, errUnknownToken
+	}
+	return lookupToken(s.db, token)
+}
+
+// authenticate answers a failure in plain text, as the publishing routes always have.
 func (s *server) authenticate(w http.ResponseWriter, r *http.Request) (caller, bool) {
-	if token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
-		c, err := lookupToken(s.db, token)
-		if err == nil {
-			return c, true
-		}
-		if !errors.Is(err, errUnknownToken) {
-			log.Printf("token-lookup-failed | err=%v", err)
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return caller{}, false
-		}
+	c, err := s.callerFor(r)
+	switch {
+	case err == nil:
+		return c, true
+	case !errors.Is(err, errUnknownToken):
+		log.Printf("token-lookup-failed | err=%v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return caller{}, false
 	}
 	w.Header().Set("WWW-Authenticate", "Bearer")
 	http.Error(w, "missing or invalid token", http.StatusUnauthorized)
+	return caller{}, false
+}
+
+// authenticateJSON answers a failure with a JSON error, for the newer routes.
+func (s *server) authenticateJSON(w http.ResponseWriter, r *http.Request) (caller, bool) {
+	c, err := s.callerFor(r)
+	switch {
+	case err == nil:
+		return c, true
+	case !errors.Is(err, errUnknownToken):
+		serverError(w, "token-lookup", err)
+		return caller{}, false
+	}
+	w.Header().Set("WWW-Authenticate", "Bearer")
+	writeError(w, http.StatusUnauthorized, "unauthorized", "missing or invalid token")
 	return caller{}, false
 }
 

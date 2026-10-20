@@ -408,6 +408,7 @@ Unlike the rest of the platform, a page's request carries no identity: the site 
 | `user_exists`, `label_exists` | 409 | The name is taken |
 | `quota_exceeded` | 409 | Too many documents, collections or KV entries |
 | `document_too_large` | 413 | The document or value is over the size limit |
+| `internal_error` | 500 | Something failed on the server. The details are in its log, never in the response. |
 | `rate_limited` | 429 | Sent by nginx, see below |
 
 ## 9. Responses that come from nginx, not from housepaged

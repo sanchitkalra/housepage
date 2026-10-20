@@ -22,7 +22,10 @@ const usage = `usage:
   housepage login --server URL --token TOKEN
   housepage publish <dir> --name NAME      upload a folder as NAME.<domain>; prints the live URL
   housepage list                           list your sites
-  housepage delete <name>                  remove a site and free its name`
+  housepage delete <name>                  remove a site and free its name
+  housepage token create --label L [--superuser]   mint a token for yourself; prints it once
+  housepage token list                     your tokens (never their values)
+  housepage token revoke <label>           delete one of your tokens`
 
 type config struct {
 	Server string `json:"server"`
@@ -77,6 +80,8 @@ func main() {
 		err = list()
 	case "delete":
 		err = del(os.Args[2:])
+	case "token":
+		err = tokenCmd(os.Args[2:])
 	case "-h", "--help", "help":
 		fmt.Println(usage)
 	default:
@@ -91,7 +96,7 @@ func main() {
 
 var httpClient = &http.Client{Timeout: 2 * time.Minute}
 
-// request sends an authenticated request; a non-200 reply becomes an error carrying the server's message.
+// request sends an authenticated request; a reply other than 2xx becomes an error carrying the server's message.
 func request(c config, method, path string, body io.Reader, contentType string) ([]byte, error) {
 	req, err := http.NewRequest(method, strings.TrimRight(c.Server, "/")+path, body)
 	if err != nil {
@@ -110,8 +115,12 @@ func request(c config, method, path string, body io.Reader, contentType string) 
 	if err != nil {
 		return nil, err
 	}
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		msg := strings.TrimSpace(string(out))
+		var e struct{ Message string }
+		if json.Unmarshal(out, &e) == nil && e.Message != "" { // the newer routes answer {"error": code, "message": text}
+			msg = e.Message
+		}
 		if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html") { // an error page from nginx, not housepaged
 			switch resp.StatusCode {
 			case http.StatusTooManyRequests:

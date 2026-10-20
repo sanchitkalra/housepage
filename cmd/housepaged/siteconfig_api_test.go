@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"log"
+	"os"
 	"strings"
 	"testing"
 )
@@ -210,5 +213,19 @@ func TestSetSiteConfigIsOneStep(t *testing.T) {
 		t.Error("a site that does not exist must fail (foreign key)")
 	} else if n := count(t, db, `SELECT count(*) FROM site_db_config`); n != 1 {
 		t.Errorf("%d rows after a failed insert, want 1 (%v)", n, fmt.Sprint(err))
+	}
+}
+
+func TestDBConfigLogLineNamesTheUser(t *testing.T) {
+	f := newDataFixture(t)
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	if r := f.cfgPut(t, f.bob, "bobsite", `{"mode":"open","maxDocs":null}`); r.code != 200 {
+		t.Fatalf("%d %s", r.code, r.raw)
+	}
+	want := "site-config | user=bob | site=bobsite | mode=open | max-collections=- | max-docs=default | max-doc-size=-"
+	if !strings.Contains(buf.String(), want) {
+		t.Errorf("log %q does not contain %q", buf.String(), want)
 	}
 }

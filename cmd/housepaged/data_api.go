@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -68,8 +69,16 @@ func (s *server) asOwner(h dataHandler) http.HandlerFunc {
 			writeError(w, http.StatusForbidden, "forbidden", fmt.Sprintf("site %q belongs to someone else", site))
 			return
 		}
-		h(w, r, site)
+		h(w, r.WithContext(context.WithValue(r.Context(), callerKey{}, c)), site)
 	}
+}
+
+// callerKey carries the authenticated caller from asOwner to a handler that wants to log who it was.
+type callerKey struct{}
+
+func callerName(r *http.Request) string {
+	c, _ := r.Context().Value(callerKey{}).(caller)
+	return c.UserName
 }
 
 // asPage serves a visitor's page. The site is whatever nginx says it is, and its mode decides: off allows

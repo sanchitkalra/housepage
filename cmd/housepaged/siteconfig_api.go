@@ -119,7 +119,7 @@ func (s *server) putDBConfig(w http.ResponseWriter, r *http.Request, site string
 		serverError(w, "set-site-config", err)
 		return
 	}
-	log.Printf("site-config | site=%s | mode=%s | max-collections=%s | max-docs=%s | max-doc-size=%s",
-		site, p.modeString(), p.maxCollections, p.maxDocs, p.maxDocSize)
+	log.Printf("site-config | user=%s | site=%s | mode=%s | max-collections=%s | max-docs=%s | max-doc-size=%s",
+		callerName(r), site, p.modeString(), p.maxCollections, p.maxDocs, p.maxDocSize)
 	s.writeConfig(w, site)
 }

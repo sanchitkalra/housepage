@@ -50,7 +50,7 @@ The data routes exist on both. On the app host they live under `/api/v1/sites/<s
 | Collection | 1 to 64 characters of `a-z 0-9 _ -`, not starting with `_` (`_kv` is reserved) |
 | KV key | 1 to 128 characters of `A-Z a-z 0-9 . _ : -` |
 | Token label | 1 to 64 characters of `A-Z a-z 0-9 . _ -`, unique per user |
-| User name | 1 to 64 characters, no control characters, unique |
+| User name | 1 to 64 characters, no control characters, not blank, unique |
 | Sort path | letters, digits, `_` and `.` (for example `when.start`) |
 
 **Limits.**

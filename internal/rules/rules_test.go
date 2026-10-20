@@ -1,6 +1,9 @@
 package rules
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestValidName(t *testing.T) {
 	good := []string{"timer", "my-notes", "abc", "a1b", "xyz"}
@@ -51,5 +54,35 @@ func TestCheckFiles(t *testing.T) {
 	}
 	if err := CheckFiles([]Entry{idx, {"css/app.css", 5}}); err != nil {
 		t.Errorf("valid site rejected: %v", err)
+	}
+}
+
+func TestValidUserName(t *testing.T) {
+	good := []string{"sam", "Sam Lee", "j", "sam.o'brien", "名前", strings.Repeat("a", 64)}
+	bad := []string{"", " ", "   ", "tab\there", "new\nline", strings.Repeat("a", 65), "nul\x00"}
+	for _, n := range good {
+		if err := ValidUserName(n); err != nil {
+			t.Errorf("ValidUserName(%q) = %v, want ok", n, err)
+		}
+	}
+	for _, n := range bad {
+		if ValidUserName(n) == nil {
+			t.Errorf("ValidUserName(%q) = ok, want error", n)
+		}
+	}
+}
+
+func TestValidLabel(t *testing.T) {
+	good := []string{"default", "ci", "my-laptop", "work_2.0", "A", strings.Repeat("a", 64)}
+	bad := []string{"", "has space", "slash/slash", "colon:colon", "emoji🙂", strings.Repeat("a", 65), "new\nline"}
+	for _, l := range good {
+		if err := ValidLabel(l); err != nil {
+			t.Errorf("ValidLabel(%q) = %v, want ok", l, err)
+		}
+	}
+	for _, l := range bad {
+		if ValidLabel(l) == nil {
+			t.Errorf("ValidLabel(%q) = ok, want error", l)
+		}
 	}
 }

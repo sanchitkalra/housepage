@@ -2,12 +2,12 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -68,14 +68,7 @@ func createToken(db *sql.DB, owner string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	token := "hp_" + hex.EncodeToString(b)
-	_, err = db.Exec(`INSERT INTO tokens(hash, user_id, label, created_at) VALUES(?, ?, ?, ?)`,
-		hashToken(token), uid, "token-"+token[3:11], time.Now().UnixMilli())
-	return token, err
+	return mintToken(db, uid, "t"+strconv.FormatInt(time.Now().UnixNano(), 36), false)
 }
 
 // ownerOfToken returns the user's name, or sql.ErrNoRows for an unknown token.

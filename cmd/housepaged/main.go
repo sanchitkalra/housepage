@@ -11,7 +11,8 @@ import (
 
 const usage = `usage:
   housepaged serve [--data DIR] [--addr ADDR] [--domain DOMAIN] [--scheme SCHEME]
-  housepaged token create [--data DIR] <owner>`
+  housepaged token create [--data DIR] <owner>
+  housepaged migrate status [--data DIR]`
 
 func main() {
 	if len(os.Args) < 2 {
@@ -23,6 +24,8 @@ func main() {
 		serve(os.Args[2:])
 	case len(os.Args) > 2 && os.Args[1] == "token" && os.Args[2] == "create":
 		tokenCreate(os.Args[3:])
+	case len(os.Args) > 2 && os.Args[1] == "migrate" && os.Args[2] == "status":
+		migrateStatusCommand(os.Args[3:])
 	default:
 		fmt.Fprintln(os.Stderr, usage)
 		os.Exit(2)
@@ -70,4 +73,15 @@ func tokenCreate(args []string) {
 		log.Fatalf("create-token-failed | err=%v", err)
 	}
 	fmt.Println(token)
+}
+
+func migrateStatusCommand(args []string) {
+	fs := flag.NewFlagSet("migrate status", flag.ExitOnError)
+	data := fs.String("data", "./data", "data directory")
+	fs.Parse(args)
+	report, err := statusReport(*data)
+	if err != nil {
+		log.Fatalf("migrate-status-failed | err=%v", err)
+	}
+	fmt.Print(report)
 }

@@ -18,13 +18,32 @@ var (
 
 // quotaError says a write would go over one of the site's limits. The API reports it as quota_exceeded.
 type quotaError struct {
-	what  string // "collections", "documents" or "entries"
-	limit int
+	what       string // "collections", "documents" or "entries"
+	limit      int
+	collection string // the collection the write was for
 }
 
 func (e *quotaError) Error() string {
-	return fmt.Sprintf("the site is at its limit of %d %s", e.limit, e.what)
+	switch e.what {
+	case "collections":
+		return fmt.Sprintf("site is at its limit of %d collections; %q would be a new one", e.limit, e.collection)
+	case "documents":
+		return fmt.Sprintf("collection %q is full: the limit is %d documents", e.collection, e.limit)
+	}
+	return fmt.Sprintf("the key-value store is full: the limit is %d entries", e.limit)
 }
+
+// tooLargeError is errTooLarge with the sizes, for the message.
+type tooLargeError struct {
+	what        string // "document" or "value"
+	size, limit int
+}
+
+func (e *tooLargeError) Error() string {
+	return fmt.Sprintf("%s is %d bytes; the limit is %d", e.what, e.size, e.limit)
+}
+
+func (e *tooLargeError) Is(target error) bool { return target == errTooLarge }
 
 // doc is a stored document as the API shows it: the envelope around the caller's data.
 type doc struct {
@@ -87,7 +106,11 @@ func prepare(data json.RawMessage, object bool, maxSize int) (string, error) {
 		return "", errNotObject
 	}
 	if buf.Len() > maxSize {
-		return "", errTooLarge
+		what := "value"
+		if object {
+			what = "document"
+		}
+		return "", &tooLargeError{what, buf.Len(), maxSize}
 	}
 	return buf.String(), nil
 }
@@ -138,11 +161,11 @@ func insertDoc(db *sql.DB, site, collection string, data json.RawMessage) (doc, 
 			return doc{}, err
 		}
 		if used >= lim.MaxCollections {
-			return doc{}, &quotaError{"collections", lim.MaxCollections}
+			return doc{}, &quotaError{what: "collections", limit: lim.MaxCollections, collection: collection}
 		}
 	}
 	if n >= lim.MaxDocs {
-		return doc{}, &quotaError{"documents", lim.MaxDocs}
+		return doc{}, &quotaError{what: "documents", limit: lim.MaxDocs, collection: collection}
 	}
 	id, err := newID()
 	if err != nil {
@@ -222,7 +245,7 @@ func putKV(db *sql.DB, site, key string, data json.RawMessage) (d doc, created b
 			return doc{}, false, err
 		}
 		if n >= lim.MaxDocs {
-			return doc{}, false, &quotaError{"entries", lim.MaxDocs}
+			return doc{}, false, &quotaError{what: "entries", limit: lim.MaxDocs}
 		}
 		if _, err := tx.Exec(`INSERT INTO docs(site, collection, id, value, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?)`,
 			site, rules.KVCollection, key, text, now, now); err != nil {

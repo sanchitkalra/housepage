@@ -35,6 +35,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/tokens", s.getTokens)
 	mux.HandleFunc("DELETE /api/v1/tokens/{label}", s.deleteToken)
 	s.mountData(mux)
+	s.mountSiteConfig(mux)
 	return mux
 }
 

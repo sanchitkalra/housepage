@@ -25,7 +25,10 @@ const usage = `usage:
   housepage delete <name>                  remove a site and free its name
   housepage token create --label L [--superuser]   mint a token for yourself; prints it once
   housepage token list                     your tokens (never their values)
-  housepage token revoke <label>           delete one of your tokens`
+  housepage token revoke <label>           delete one of your tokens
+  housepage db config <site> [--mode off|open|owner] [--max-collections N] [--max-docs N] [--max-doc-size N]
+                                           change a site's data settings; only the flags given change
+  housepage db show <site>                 a site's data mode, limits, ceilings and usage`
 
 type config struct {
 	Server string `json:"server"`
@@ -82,6 +85,8 @@ func main() {
 		err = del(os.Args[2:])
 	case "token":
 		err = tokenCmd(os.Args[2:])
+	case "db":
+		err = dbCmd(os.Args[2:])
 	case "-h", "--help", "help":
 		fmt.Println(usage)
 	default:

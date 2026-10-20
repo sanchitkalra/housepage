@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"flag"
 	"fmt"
 	"log"
@@ -9,10 +10,10 @@ import (
 	"time"
 )
 
-const usage = `usage:
-  housepaged serve [--data DIR] [--addr ADDR] [--domain DOMAIN] [--scheme SCHEME]
-  housepaged token create [--data DIR] <owner>
-  housepaged migrate status [--data DIR]`
+const usage = "usage:\n" +
+	"  housepaged serve [--data DIR] [--addr ADDR] [--domain DOMAIN] [--scheme SCHEME]\n" +
+	operatorUsage + "\n" +
+	"  housepaged migrate status [--data DIR]"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -22,8 +23,12 @@ func main() {
 	switch {
 	case os.Args[1] == "serve":
 		serve(os.Args[2:])
-	case len(os.Args) > 2 && os.Args[1] == "token" && os.Args[2] == "create":
-		tokenCreate(os.Args[3:])
+	case os.Args[1] == "user" || os.Args[1] == "token":
+		env := cmdEnv{open: openForCommand, stdout: os.Stdout, stderr: os.Stderr}
+		if err := env.run(os.Args[1], os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
 	case len(os.Args) > 2 && os.Args[1] == "migrate" && os.Args[2] == "status":
 		migrateStatusCommand(os.Args[3:])
 	default:
@@ -56,23 +61,12 @@ func serve(args []string) {
 	log.Fatal(srv.ListenAndServe())
 }
 
-func tokenCreate(args []string) {
-	fs := flag.NewFlagSet("token create", flag.ExitOnError)
-	data := fs.String("data", "./data", "data directory")
-	fs.Parse(args)
-	if fs.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, usage)
-		os.Exit(2)
-	}
-	db, err := openDB(*data)
+func openForCommand(dataDir string) (*sql.DB, func(), error) {
+	db, err := openDB(dataDir)
 	if err != nil {
-		log.Fatalf("open-db-failed | err=%v", err)
+		return nil, nil, err
 	}
-	token, err := createToken(db, fs.Arg(0))
-	if err != nil {
-		log.Fatalf("create-token-failed | err=%v", err)
-	}
-	fmt.Println(token)
+	return db, func() { db.Close() }, nil
 }
 
 func migrateStatusCommand(args []string) {

@@ -165,6 +165,32 @@ func listTokens(db *sql.DB, userID int64) ([]tokenInfo, error) {
 	return out, rows.Err()
 }
 
+// tokenRow is a token with the name of the user it belongs to.
+type tokenRow struct {
+	User string
+	tokenInfo
+}
+
+// listAllTokens returns every token, grouped by user name.
+func listAllTokens(db *sql.DB) ([]tokenRow, error) {
+	rows, err := db.Query(`SELECT u.name, t.label, t.is_superuser, t.created_at FROM tokens t JOIN users u ON u.id = t.user_id ORDER BY u.name, t.created_at, t.label`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []tokenRow
+	for rows.Next() {
+		var r tokenRow
+		var super int
+		if err := rows.Scan(&r.User, &r.Label, &super, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		r.IsSuperuser = super == 1
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // revokeToken deletes one of a user's tokens. Another user's label is errNotFound, like a missing one.
 func revokeToken(db *sql.DB, userID int64, label string) error {
 	res, err := db.Exec(`DELETE FROM tokens WHERE user_id = ? AND label = ?`, userID, label)

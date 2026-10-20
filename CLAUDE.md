@@ -2,6 +2,8 @@
 
 A personal playground for publishing static sites and PWAs. A site claims a name and is served at `NAME.<domain>`. Coding agents publish with a CLI that a skill teaches them to use. Inspired by Shopify's "quick" (shopify.engineering/quick). A standalone project.
 
+> **Resuming work? Read `HANDOFF.md` first.** It records the current state (modules 1 to 8 of 15 are done), the next step, and the working agreement with the user. Some sections below are older than the code, and `HANDOFF.md` section 10 lists which.
+
 ## How to work with this user
 
 - **Do not make design decisions or unrequested changes.** Propose, get a yes, then build. This went wrong once already: an installer, Go changes and a config redesign were made unasked and had to be reverted. When a request is ambiguous, restate your understanding and confirm before coding.

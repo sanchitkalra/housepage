@@ -1,0 +1,78 @@
+// housepage database. SQLite, one file at <dataDir>/housepage.db.
+// Paste this file into https://dbdiagram.io/d to view and edit it.
+// Header colours: amber = exists today and changes, teal = new.
+
+Project housepage {
+  database_type: 'SQLite'
+  Note: '''
+    Collections are not a table: a collection exists while at least one row in docs has its name.
+    Counts (documents per collection, collections per site, sites per user) are derived on write; nothing stores them.
+    KV is the reserved collection "_kv" with caller-chosen ids.
+    The whole diagram is the baseline migration 0001_init.sql. Later changes are numbered migration files applied at startup.
+    Foreign keys are only enforced once PRAGMA foreign_keys is switched on for every connection.
+    Two triggers guard superuser tokens (see the notes on tokens and users).
+  '''
+}
+
+// ---------- users and tokens ----------
+
+Table users [headercolor: #0E7490] {
+  id integer [pk, increment, note: 'the identity of a user']
+  name text [not null, unique, note: 'display name only. Unique so that operator commands can address a user by name']
+  is_superuser integer [not null, default: 0, note: '0 or 1. Only a superuser may hold superuser tokens. Demoting a user (1 to 0) downgrades their superuser tokens to ordinary ones (trigger)']
+  max_sites integer [note: 'NULL = default 10. Changed only by the housepaged CLI or by a superuser token, never by the user themselves']
+  created_at integer [not null, note: 'unix milliseconds']
+}
+
+Table tokens [headercolor: #B45309] {
+  hash text [pk, note: 'SHA-256 hex of the token. The plaintext is shown once and never stored']
+  user_id integer [not null]
+  label text [not null, note: 'names the token, for example laptop or ci. Unique per user']
+  is_superuser integer [not null, default: 0, note: '0 or 1. May be 1 only if the user is a superuser: a trigger rejects any other insert or update. A superuser can also hold ordinary tokens']
+  created_at integer [not null, note: 'unix milliseconds']
+
+  indexes {
+    (user_id, label) [unique]
+  }
+}
+
+Table sites [headercolor: #B45309] {
+  name text [pk, note: 'the site name, claimed first come first served. It is the identity of a site']
+  owner_id integer [not null, note: 'the user who owns the site']
+
+  indexes {
+    owner_id [note: 'lists and counts the sites of one user']
+  }
+}
+
+// ---------- the data API ----------
+
+Table site_db_config [headercolor: #0E7490] {
+  site text [pk, note: 'one row per site, created on first config']
+  mode text [not null, default: 'off', note: 'off | open | owner']
+  max_collections integer [note: 'NULL = default 5. Server ceiling 100']
+  max_docs integer [note: 'NULL = default 500 per collection. Server ceiling 20000']
+  max_doc_size integer [note: 'NULL = default 4096 bytes. Server ceiling 4096']
+
+  Note: 'No row means mode off and all defaults. Read and write rate limits are hardcoded in nginx for now (see site-data_plan.md).'
+}
+
+Table docs [headercolor: #0E7490] {
+  site text [not null]
+  collection text [not null, note: '"_kv" is reserved for KV. Other names cannot start with "_"']
+  id text [not null, note: 'collections: server-generated ULID, so id order is creation order. KV: the key chosen by the caller']
+  value text [not null, note: 'JSON text, CHECK (json_valid(value)). A document is an object, a KV value is any JSON. At most max_doc_size bytes']
+  created_at integer [not null, note: 'unix milliseconds']
+  updated_at integer [not null, note: 'unix milliseconds']
+
+  indexes {
+    (site, collection, id) [pk, note: 'also serves the default listing: rows come back in id order, so no sort is needed']
+  }
+
+  Note: 'WITHOUT ROWID. No other indexes in v0: sorting by a JSON field reads the collection and sorts it, which the document caps keep small.'
+}
+
+Ref: tokens.user_id > users.id
+Ref: sites.owner_id > users.id
+Ref: site_db_config.site - sites.name [delete: cascade]
+Ref: docs.site > sites.name [delete: cascade]

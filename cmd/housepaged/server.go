@@ -41,13 +41,13 @@ func writeJSON(w http.ResponseWriter, v any) {
 }
 
 func (s *server) listSites(w http.ResponseWriter, r *http.Request) {
-	owner, ok := s.authenticate(w, r)
+	c, ok := s.authenticate(w, r)
 	if !ok {
 		return
 	}
-	names, err := sitesOf(s.db, owner)
+	names, err := sitesOfUser(s.db, c.UserID)
 	if err != nil {
-		log.Printf("list-failed | owner=%s | err=%v", owner, err)
+		log.Printf("list-failed | user=%s | err=%v", c.UserName, err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -63,7 +63,7 @@ func (s *server) listSites(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) deleteSite(w http.ResponseWriter, r *http.Request) {
-	owner, ok := s.authenticate(w, r)
+	c, ok := s.authenticate(w, r)
 	if !ok {
 		return
 	}
@@ -72,48 +72,48 @@ func (s *server) deleteSite(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	current, err := ownerOfSite(s.db, name)
+	ownerID, err := siteOwnerID(s.db, name)
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, errNotFound):
 		http.Error(w, fmt.Sprintf("no site named %q", name), http.StatusNotFound)
 		return
 	case err != nil:
-		log.Printf("delete-lookup-failed | owner=%s | site=%s | err=%v", owner, name, err)
+		log.Printf("delete-lookup-failed | user=%s | site=%s | err=%v", c.UserName, name, err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
-	case current != owner:
+	case ownerID != c.UserID:
 		http.Error(w, fmt.Sprintf("site %q belongs to someone else", name), http.StatusForbidden)
 		return
 	}
 	if err := os.RemoveAll(filepath.Join(s.dataDir, "sites", name)); err != nil {
-		log.Printf("delete-files-failed | owner=%s | site=%s | err=%v", owner, name, err)
+		log.Printf("delete-files-failed | user=%s | site=%s | err=%v", c.UserName, name, err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	if err := release(s.db, name); err != nil {
-		log.Printf("release-failed | owner=%s | site=%s | err=%v", owner, name, err)
+	if err := releaseSite(s.db, name); err != nil {
+		log.Printf("release-failed | user=%s | site=%s | err=%v", c.UserName, name, err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	log.Printf("deleted | owner=%s | site=%s", owner, name)
+	log.Printf("deleted | user=%s | site=%s", c.UserName, name)
 	writeJSON(w, map[string]string{"deleted": name})
 }
 
-func (s *server) authenticate(w http.ResponseWriter, r *http.Request) (string, bool) {
+func (s *server) authenticate(w http.ResponseWriter, r *http.Request) (caller, bool) {
 	if token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
-		owner, err := ownerOfToken(s.db, token)
+		c, err := lookupToken(s.db, token)
 		if err == nil {
-			return owner, true
+			return c, true
 		}
-		if !errors.Is(err, sql.ErrNoRows) {
+		if !errors.Is(err, errUnknownToken) {
 			log.Printf("token-lookup-failed | err=%v", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
-			return "", false
+			return caller{}, false
 		}
 	}
 	w.Header().Set("WWW-Authenticate", "Bearer")
 	http.Error(w, "missing or invalid token", http.StatusUnauthorized)
-	return "", false
+	return caller{}, false
 }
 
 // readFiles streams the multipart body. Each part's filename is the file's relative path;
@@ -150,7 +150,7 @@ func readFiles(w http.ResponseWriter, r *http.Request) ([]file, error) {
 
 // ponytail: the body is read before the name's owner is checked, bounded by the size limits.
 func (s *server) putSite(w http.ResponseWriter, r *http.Request) {
-	owner, ok := s.authenticate(w, r)
+	c, ok := s.authenticate(w, r)
 	if !ok {
 		return
 	}
@@ -169,21 +169,25 @@ func (s *server) putSite(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	current, err := claim(s.db, name, owner)
+	claimed, err := claimSite(s.db, name, c.UserID)
 	if err != nil {
-		log.Printf("claim-failed | owner=%s | site=%s | err=%v", owner, name, err)
+		log.Printf("claim-failed | user=%s | site=%s | err=%v", c.UserName, name, err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	if current != owner {
+	switch claimed.outcome {
+	case takenByOther:
 		http.Error(w, fmt.Sprintf("name %q is already taken", name), http.StatusForbidden)
+		return
+	case atSiteLimit:
+		http.Error(w, fmt.Sprintf("site limit reached: %d of %d", claimed.used, claimed.limit), http.StatusForbidden)
 		return
 	}
 	if err := write(s.dataDir, name, files); err != nil {
-		log.Printf("publish-failed | owner=%s | site=%s | err=%v", owner, name, err)
+		log.Printf("publish-failed | user=%s | site=%s | err=%v", c.UserName, name, err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	log.Printf("published | owner=%s | site=%s | files=%d", owner, name, len(files))
+	log.Printf("published | user=%s | site=%s | files=%d", c.UserName, name, len(files))
 	writeJSON(w, map[string]string{"url": s.siteURL(name)})
 }

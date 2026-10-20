@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"database/sql"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -13,6 +14,11 @@ import (
 )
 
 func newTestServer(t *testing.T) (*httptest.Server, string, map[string]string) {
+	srv, dir, tokens, _ := newTestServerWithDB(t)
+	return srv, dir, tokens
+}
+
+func newTestServerWithDB(t *testing.T) (*httptest.Server, string, map[string]string, *sql.DB) {
 	t.Helper()
 	d := t.TempDir()
 	db, err := openDB(d)
@@ -22,13 +28,13 @@ func newTestServer(t *testing.T) (*httptest.Server, string, map[string]string) {
 	t.Cleanup(func() { db.Close() })
 	tokens := map[string]string{}
 	for _, owner := range []string{"bob", "amy"} {
-		if tokens[owner], err = createToken(db, owner); err != nil {
+		if _, tokens[owner], err = createUser(db, owner, false); err != nil {
 			t.Fatal(err)
 		}
 	}
 	srv := httptest.NewServer((&server{db: db, dataDir: d, scheme: "http", domain: "example.test"}).routes())
 	t.Cleanup(srv.Close)
-	return srv, d, tokens
+	return srv, d, tokens, db
 }
 
 func put(t *testing.T, srv *httptest.Server, name, token string, files map[string]string) (int, string) {

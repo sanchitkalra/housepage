@@ -1,0 +1,8 @@
+{
+  "domain": "example.dev",
+  "scheme": "https",
+  "dataDir": "~/housepage-data",
+  "nginxPort": 8080,
+  "apiPort": 8081,
+  "tunnelToken": "PASTE_YOUR_TUNNEL_TOKEN_HERE"
+}

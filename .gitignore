@@ -9,3 +9,7 @@
 *.db-*
 
 .DS_Store
+
+# run.sh output and the real config (it holds the tunnel token)
+/run/
+/housepage.json

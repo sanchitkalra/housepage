@@ -1,21 +1,23 @@
 # housepage
 
-A tiny personal playground for publishing static sites and PWAs. Every site claims a name and gets `NAME.<your-domain>`. Coding agents publish through a CLI and a skill.
+A tiny personal playground for publishing static sites and PWAs. Every site claims a name and gets `NAME.<your-domain>`. Coding agents publish through a CLI and a skill. A site can also keep small shared JSON data (a key-value store and collections of documents) that its own page reads and writes.
 
 ```
-agent / you ──► housepage CLI ──PUT multipart──► housepaged ──► sites/<name>/
+agent / you ──► housepage CLI ──► nginx (app.<domain>/api/) ──► housepaged ──► sites/<name>/ + housepage.db
                                                                     ▲
-browser ──► nginx (routes by Host header: NAME.<domain> → sites/NAME/)
+browser ──► nginx (NAME.<domain>) ── static files from sites/<name>/
+                │
+                └─ /_api/ ──► housepaged   (the page's own data calls; nginx sets which site it is)
 ```
 
-Status: v0. Static files only, no server-side code, no dashboard yet.
+Status: v0. Static files, users with tokens, and a per-site data store. No server-side code, no dashboard yet.
 
 ## How it works
 
-- **nginx** serves `sites/<name>/` for the host `<name>.<domain>` using one regex `server_name`. Publishing writes files, so nginx never needs a reload.
-- **housepaged** (the server) validates uploads, tracks which token owns which name in SQLite, and writes the files.
-- **housepage** (the CLI) uploads a folder. It prints the live URL on stdout, so agents and scripts can read it.
-- **`skills/housepage/SKILL.md`** teaches coding agents when and how to use the CLI.
+- **nginx** serves `sites/<name>/` for the host `<name>.<domain>` using one regex `server_name`. Publishing writes files, so nginx never needs a reload. On a site host, `/_api/` goes to housepaged with an `X-Housepage-Site` header that nginx sets from the host name, with per-visitor rate limits.
+- **housepaged** (the server) validates uploads, keeps users, tokens, sites and site data in SQLite (`housepage.db`), and writes the files. Schema changes are numbered migrations applied at startup, with a backup before each upgrade.
+- **housepage** (the CLI) uploads a folder, manages your tokens and your sites' data settings. Results go to stdout and messages to stderr, so scripts can capture them.
+- **`skills/housepage/SKILL.md`** teaches coding agents when and how to use the CLI, including the data store.
 
 ## Quick start (local)
 
@@ -23,50 +25,62 @@ Status: v0. Static files only, no server-side code, no dashboard yet.
 go build -o housepaged ./cmd/housepaged
 go build -o housepage  ./cmd/housepage
 
-./housepaged token create --data ./data me          # prints a token once; only its hash is stored
-./housepaged serve --data ./data                    # API on 127.0.0.1:8081
+./housepaged user create --data ./data --superuser me   # prints the user's first token once; only its hash is stored
+./housepaged serve --data ./data                        # API on 127.0.0.1:8081
 
-./housepage login --token <token>                   # add --server URL if not local
-./housepage publish ./my-site --name my-site        # prints the live URL
+./housepage login --token <token>                       # add --server URL if not local
+./housepage publish ./my-site --name my-site            # prints the live URL
 ./housepage list
 ./housepage delete my-site
 ```
 
 `serve` flags: `--data` (holds `sites/` and `housepage.db`), `--addr`, `--domain` (default `localhost:8080`) and `--scheme`. The last two only shape the URLs the API returns.
 
-Point nginx at the same data directory. A minimal local config:
+For nginx locally, run `./run.sh --render-only` with a config file (see below) and use the generated `run/nginx/nginx.conf` as your template: it has the app host, the site host, the `/_api/` location and the rate-limit zones. Start it with `nginx -p run/nginx -c nginx.conf`, then open `http://my-site.<domain>:<port>`. Browsers resolve `*.localhost` to loopback, so a domain like `localhost` needs no DNS.
 
-```nginx
-http {
-    include mime.types;                       # add: application/manifest+json webmanifest;
-    limit_req_zone $binary_remote_addr zone=api:10m rate=30r/m;
-    limit_req_status 429;
+## Users and tokens
 
-    server { listen 8080 default_server; return 404 "no such site\n"; }
+| Who | Can |
+|---|---|
+| The operator (`housepaged` on the server) | create users, mint any token, list or revoke any token, set a user's site limit |
+| A superuser token | create users and change `max_sites` through the API, mint tokens for its own user |
+| An ordinary token | publish, list and delete its own sites, mint ordinary tokens for its own user |
 
-    server {                                  # the API; an exact name beats the regex below
-        listen 8080;
-        server_name app.localhost;
-        client_max_body_size 30m;             # nginx's default of 1m would reject uploads
-        location /api/ {
-            limit_req zone=api burst=10 nodelay;
-            proxy_pass http://127.0.0.1:8081;
-            proxy_set_header Host $host;
-        }
-        location / { return 404; }
-    }
+```bash
+housepaged user create [--data DIR] [--superuser] <name>      # also mints the user's first token, labelled "default"
+housepaged user set    [--data DIR] [--max-sites N|default] [--superuser|--no-superuser] <user>
+housepaged token create|list|revoke ...                       # operator commands, for any user
 
-    server {                                  # the sites
-        listen 8080;
-        server_name ~^(?<page>[a-z0-9-]+)\.localhost$;
-        root sites/$page;                     # relative to nginx's -p prefix (the data dir)
-        index index.html;
-        add_header Cache-Control "no-cache" always;
-    }
-}
+housepage token create --label ci [--superuser]               # for yourself; prints it once
+housepage token list
+housepage token revoke <label>
 ```
 
-Run it with `nginx -p <data-dir> -c nginx.conf`, then open `http://my-site.localhost:8080`. Browsers resolve `*.localhost` to loopback, so no DNS is needed.
+A user may own 10 sites by default (the operator can change it). The routes are in `api-contracts.md`, section 3.
+
+## Site data
+
+A published site can keep data that its own page reads and writes with `fetch('/_api/...')`: no token, same origin. It is **off** until the owner enables it.
+
+```bash
+housepage db config my-site --mode open       # visitors read and write; "owner" = visitors read only
+housepage db config my-site --max-docs 2000   # flags change only what is given
+housepage db show my-site                     # mode, limits, ceilings and usage
+```
+
+```js
+await fetch('/_api/db/messages', { method: 'POST', body: JSON.stringify({ name, text }) });
+const { items, nextCursor } = await (await fetch('/_api/db/messages?order=desc&limit=20')).json();
+```
+
+| | |
+|---|---|
+| Stores | key-value (`/_api/kv/{key}`, any JSON) and collections (`/_api/db/{collection}`, JSON objects with server-made ids) |
+| Listing | creation order, `order=desc`, or `sort=<field>` (nested paths work, missing values last); paging by cursor only |
+| Limits (default / ceiling) | 5 / 100 collections, 500 / 20,000 documents per collection (and KV entries), 4096 bytes per document |
+| Rate limits | about 20 reads and 2 writes per second per visitor, set in nginx |
+
+`open` means anyone with the URL can add, change and delete the data. Every route, error code and example is in `api-contracts.md`; the reasoning is in `site-data_plan.md`.
 
 ## Running it for real
 
@@ -87,7 +101,7 @@ cp housepage.example.json housepage.json   # then edit it; the file is git-ignor
 | `nginxPort`, `apiPort` | Local ports (nginx and housepaged listen on loopback only) | 8080, 8081 |
 | `tunnelToken` | Token of a Cloudflare named tunnel | required |
 
-The nginx config and the service definitions are generated as plain files in `run/`, and contain the same commands you would type by hand. Cloudflare needs two public hostname rules on the tunnel, added once in its dashboard: `*.<domain>` and `app.<domain>`, both pointing to `http://localhost:<nginxPort>`. Create a token with `./bin/housepaged token create --data <dataDir> <name>`, then use `./bin/housepage login --server https://app.<domain> --token <token>`.
+The nginx config and the service definitions are generated as plain files in `run/`, and contain the same commands you would type by hand. Cloudflare needs two public hostname rules on the tunnel, added once in its dashboard: `*.<domain>` and `app.<domain>`, both pointing to `http://localhost:<nginxPort>`. Create your user with `./bin/housepaged user create --data <dataDir> --superuser <name>`, then `./bin/housepage login --server https://app.<domain> --token <token>`.
 
 ## Rules
 
@@ -99,10 +113,15 @@ The nginx config and the service definitions are generated as plain files in `ru
 ## Layout
 
 ```
-cmd/housepage/     CLI: login, publish, list, delete
-cmd/housepaged/    server: serve, token create
-internal/rules/    validation shared by both
+cmd/housepage/     CLI: login, publish, list, delete, token, db
+cmd/housepaged/    server: serve, migrate status, user, token (operator commands)
+  migrations/      numbered SQL files embedded in the binary
+internal/rules/    validation, limits and the listing cursor, shared by both
 skills/housepage/  agent skill
+api-contracts.md   every HTTP route with examples and error codes
+site-data_plan.md  design decisions and the build order
+migrations_plan.md how migrations work
+db-diagram.dbml    the schema (open it at dbdiagram.io)
 run.sh             install dependencies, build, start the three services
 shutdown.sh        stop the three services
 ```
@@ -111,10 +130,11 @@ shutdown.sh        stop the three services
 
 - Publishing is wipe-then-write, so a visitor can briefly see a half-written site. Swapping a symlink would make it atomic and give rollback.
 - `run.sh` needs a named Cloudflare tunnel. Quick tunnels are not supported.
-- Tokens are created by hand with `housepaged token create`. There are no accounts, quotas or per-token rate limits.
-- Behind a Cloudflare tunnel, per-IP rate limiting needs nginx's `real_ip` module with `CF-Connecting-IP`. Without it every request looks like one client.
+- Users are created by the operator or by a superuser through the API; the `housepage` CLI has no command for it.
+- Request rates are fixed in the nginx template, not per site.
+- Listing sorted by a field reads the whole collection each time (about 20 to 30 ms at 20,000 documents); there are no indexes in v0.
 - Every site shares the parent domain, so keep any future dashboard on a separate registrable domain.
-- Published sites are public.
+- Published sites and their data (when enabled) are public.
 
 ## Tests
 

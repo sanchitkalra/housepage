@@ -1,8 +1,8 @@
 # housepage
 
-A personal playground for publishing static sites and PWAs. A site claims a name and is served at `NAME.<domain>`. Coding agents publish with a CLI that a skill teaches them to use. Inspired by Shopify's "quick" (shopify.engineering/quick). A standalone project.
+A personal playground for publishing static sites and PWAs. A site claims a name and is served at `NAME.<domain>`. Coding agents publish with a CLI that a skill teaches them to use. A site can keep small shared JSON data (key-value and collections) that its own page reads and writes. Inspired by Shopify's "quick" (shopify.engineering/quick). A standalone project.
 
-> **Resuming work? Read `HANDOFF.md` first.** It records the current state (modules 1 to 8 of 15 are done), the next step, and the working agreement with the user. Some sections below are older than the code, and `HANDOFF.md` section 10 lists which.
+> **Resuming work? Read `HANDOFF.md` first.** It records the working agreement with the user and how the build went (all 15 modules of `site-data_plan.md` are done).
 
 ## How to work with this user
 
@@ -15,21 +15,24 @@ A personal playground for publishing static sites and PWAs. A site claims a name
 ## Architecture
 
 ```
-agent / user ──► housepage CLI ──PUT multipart──► nginx (app.<domain>/api/) ──► housepaged ──► <dataDir>/sites/<name>/
-                                                                                                      ▲
-browser ──► Cloudflare tunnel ──► nginx (name.<domain>, routed by Host header) ───────────────────────┘
+agent / user ──► housepage CLI ──► nginx (app.<domain>/api/) ──► housepaged ──► <dataDir>/sites/<name>/ + housepage.db
+                                                                                         ▲
+browser ──► Cloudflare tunnel ──► nginx (name.<domain>, by Host header) ── static files ─┘
+                                        └─ /_api/ (header X-Housepage-Site set by nginx) ──► housepaged
 ```
 
 | Piece | Role |
 |---|---|
-| `cmd/housepaged` | Server. `serve` runs the API on `127.0.0.1:8081`; `token create <owner>` writes a hashed token to SQLite and prints it once |
-| `cmd/housepage` | Client CLI: `login`, `publish <dir> --name N`, `list`, `delete <name>`. stdout is only the URL; progress goes to stderr. Config in `os.UserConfigDir()/housepage/config.json` (mode 0600) |
-| `internal/rules` | Validation shared by both: name, path and size rules. The server **must** enforce them; the client only uses them to fail early |
-| `skills/housepage/SKILL.md` | Teaches coding agents to publish via the CLI. Replaces the MCP idea (dropped) |
-| nginx | Not Go. Serves site files by Host header, proxies `/api/`, applies the upload cap and rate limit |
+| `cmd/housepaged` | Server. `serve`; `migrate status`; operator commands `user create/set`, `token create/list/revoke`. SQLite with embedded numbered migrations (`migrations/`), applied at startup with a backup first. One connection in the pool: inside a transaction use only the `tx` |
+| `cmd/housepage` | Client CLI: `login`, `publish`, `list`, `delete`, `token create/list/revoke`, `db config/show`. Results to stdout, messages to stderr. Config in `os.UserConfigDir()/housepage/config.json` (mode 0600) |
+| `internal/rules` | Validation, limits and the listing cursor shared by both. The server **must** enforce them; the client only uses them to fail early |
+| `skills/housepage/SKILL.md` | Teaches coding agents to publish and to use the data store, and to ask the user before enabling `open` mode |
+| nginx | Not Go. Serves site files by Host header, proxies `/api/` (30 requests a minute) and the sites' `/_api/` (20 reads and 2 writes a second per visitor, 16 KB bodies), sets `X-Housepage-Site` |
 | cloudflared | Tunnel to the internet. Named tunnel with a token; **no quick tunnels** |
 
-API (all need `Authorization: Bearer hp_…`): `PUT /api/v1/sites/{name}` (multipart body, each part's filename is the file's relative path), `GET /api/v1/sites`, `DELETE /api/v1/sites/{name}`. Status codes: 400 validation, 401 token, 403 name owned by someone else, 404 unknown site, 413 too large, 429 rate limited (from nginx).
+Where to look: `api-contracts.md` (every route, with examples and error codes), `site-data_plan.md` (design decisions and build order), `migrations_plan.md`, `db-diagram.dbml`.
+
+API (all but the site-host data routes need `Authorization: Bearer hp_…`): publishing `PUT/GET/DELETE /api/v1/sites[/{name}]` (plain-text errors), users and tokens under `/api/v1/users` and `/api/v1/tokens`, site settings `GET/PUT /api/v1/sites/{site}/db-config`, and the data routes (`kv/…`, `db/…`) under `/api/v1/sites/{site}/` for the owner or `/_api/` on the site host (no token, the site's data mode decides). New routes answer JSON errors `{error, message}`.
 
 ## Rules
 
@@ -43,7 +46,7 @@ API (all need `Authorization: Bearer hp_…`): `PUT /api/v1/sites/{name}` (multi
 go test ./...                                    # all tests (standard library, plus modernc.org/sqlite as the only direct dependency)
 go build -o bin/housepaged ./cmd/housepaged
 go build -o bin/housepage  ./cmd/housepage
-./bin/housepaged token create --data DIR me      # prints a token once
+./bin/housepaged user create --data DIR --superuser me   # prints the user's first token once
 ./bin/housepaged serve --data DIR --domain example.dev --scheme https
 ./run.sh [config.json] [--render-only]           # installs deps, builds, starts the 3 services; --render-only changes nothing outside run/
 ./shutdown.sh                                    # stops and disables the 3 services
@@ -55,7 +58,9 @@ go build -o bin/housepage  ./cmd/housepage
 
 | Done | Notes |
 |---|---|
-| Rules, server, CLI, skill | Tests pass. Verified end to end locally through nginx and through Cloudflare quick tunnels (including installing a PWA on an iPhone) |
+| Rules, server, CLI, skill | Tests pass |
+| Users, tokens, site limit, migrations | Operator commands, API and client commands |
+| Site data store | Writes, listing with cursors, settings and usage, both mounts, nginx limits. Verified end to end through real nginx, and with headless agents using the skill |
 | `run.sh`, `shutdown.sh` | `--render-only` verified (config checks, `nginx -t`, plists lint clean). **The real start, supervision and shutdown cycle, the build step and the whole Linux path are untested** |
 
 | Next (nothing here is started) |
@@ -64,11 +69,11 @@ go build -o bin/housepage  ./cmd/housepage
 | Create a named tunnel, copy its token, add two public hostname rules by hand in the dashboard: `*.<domain>` and `app.<domain>`, both to `http://localhost:<nginxPort>` |
 | First real `./run.sh`, then test crash-restart and `./shutdown.sh`. Note: port 8080 may be held by the old playground nginx (see below) |
 | Raspberry Pi hosting (Linux path of `run.sh`) |
-| README does not yet mention `run.sh` and `shutdown.sh` |
 | Skill and sample page: add `<link rel="apple-touch-icon">` and a favicon (iOS probes `/apple-touch-icon.png` and 404s) |
 | nginx access log has no timestamps; add `$time_local` to `log_format` |
+| Choose a licence (the repo is public and has none) |
 
-Ideas the user has not asked for yet, so do not build unprompted: atomic publish via symlink swap (v0 is wipe-then-write), per-token or per-site scoped tokens, per-owner quotas, a dashboard on a separate registrable domain, zip upload.
+Ideas the user has not asked for yet, so do not build unprompted: atomic publish via symlink swap (v0 is wipe-then-write), a dashboard on a separate registrable domain, zip upload, and the data store's future work listed in `site-data_plan.md` (`increment` and `merge` updates, indexes, per-collection access rules, private reads, realtime, per-site rate limits).
 
 ## Gotchas learned
 

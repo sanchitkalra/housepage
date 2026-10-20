@@ -4,10 +4,9 @@ Every HTTP endpoint with a sample request and response. Domain `example.dev` and
 
 | Status | Section |
 |---|---|
-| **Built** | 2. Publishing sites |
-| **Designed, not built** | 3. Users and tokens, 4. Site data settings, 5. Key-value, 6. Collections (see `site-data_plan.md`) |
+| **Built** | 2. Publishing sites, 3. Users and tokens, 4. Site data settings, 5. Key-value, 6. Collections (design notes in `site-data_plan.md`) |
 
-All the details below, including the names, limits and error shapes, are approved.
+The names, limits and error shapes below are what the server does.
 
 ## 1. Conventions
 
@@ -37,7 +36,7 @@ The data routes exist on both. On the app host they live under `/api/v1/sites/<s
 **Errors.** The three publishing routes (section 2) answer errors in **plain text**, as they already do. Every other route answers errors in JSON:
 
 ```json
-{ "error": "quota_exceeded", "message": "collection \"events\" is full: 500 of 500 documents" }
+{ "error": "quota_exceeded", "message": "collection \"events\" is full: the limit is 500 documents" }
 ```
 
 `error` is a stable code for programs, `message` is for people. The codes are in section 8. This applies to all the new routes, not only the data ones.
@@ -121,7 +120,7 @@ Deletes a site, frees its name and (once the data API exists) deletes all its da
 
 ---
 
-## 3. Users and tokens (designed)
+## 3. Users and tokens (built)
 
 ### `POST /api/v1/users`
 
@@ -209,7 +208,7 @@ Revokes one of the caller's own tokens. It stops working at once, including a to
 
 ---
 
-## 4. Site data settings (designed)
+## 4. Site data settings (built)
 
 ### `GET /api/v1/sites/{site}/db-config`
 
@@ -247,7 +246,7 @@ Lowering a limit below current usage is accepted. Existing data stays, and only 
 
 ---
 
-## 5. Key-value (designed)
+## 5. Key-value (built)
 
 The routes below are shown on the site host (`/_api/…`). On the app host the same routes sit under `/api/v1/sites/<site>/…`.
 
@@ -293,14 +292,14 @@ curl "https://tip.example.dev/_api/kv?prefix=score:&limit=2"
 
 | Status | `error` |
 |---|---|
-| 400 | `invalid_key`, `invalid_json`, `invalid_cursor`, `unknown_strategy` |
+| 400 | `invalid_key`, `invalid_json`, `invalid_cursor`, `unknown_strategy`; `cursor_mismatch` when `prefix` is sent with a cursor issued for a different prefix |
 | 403 | `db_disabled`, `read_only` (section 7) |
-| 409 | `quota_exceeded`: `the key-value store is full: 500 of 500 entries` |
+| 409 | `quota_exceeded`: `the key-value store is full: the limit is 500 entries` |
 | 413 | `document_too_large`: `value is 5120 bytes; the limit is 4096` |
 
 ---
 
-## 6. Collections (designed)
+## 6. Collections (built)
 
 A collection is an ordered set of JSON documents, each with a server-generated id (a ULID, so id order is creation order). Collections are created by the first insert and disappear when their last document is deleted.
 
@@ -322,8 +321,8 @@ curl -X POST https://tip.example.dev/_api/db/events -d '{"title":"Launch","when"
 | Status | `error` |
 |---|---|
 | 400 | `invalid_collection`, `invalid_json`, `not_an_object` |
-| 409 | `quota_exceeded`: `collection "events" is full: 500 of 500 documents`, or `site has 5 of 5 collections; "tasks" would be a sixth` |
-| 413 | `document_too_large`: `document is 5120 bytes; the limit is 4096` |
+| 409 | `quota_exceeded`: `collection "events" is full: the limit is 500 documents`, or `site is at its limit of 5 collections; "tasks" would be a new one` |
+| 413 | `document_too_large`: `document is 5120 bytes; the limit is 4096`. A request body over 64 KiB is refused the same way before it is parsed. |
 
 ### `GET /_api/db/{collection}/{id}`
 
@@ -380,7 +379,7 @@ The last page has `"nextCursor": null`. Cursors are opaque: do not parse them. T
 
 | Status | `error` |
 |---|---|
-| 400 | `invalid_cursor`, `invalid_sort`, `invalid_order`, `invalid_limit` |
+| 400 | `invalid_cursor` (also a cursor that was issued for the other kind of listing), `invalid_sort`, `invalid_order`, `invalid_limit` |
 | 400 | `cursor_mismatch`: `this cursor was issued for sort=when.start order=asc; start again without a cursor to change the sort` (sent only when `sort` or `order` accompany a cursor and differ from it) |
 
 ---

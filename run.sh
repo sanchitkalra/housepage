@@ -313,7 +313,8 @@ Cloudflare needs two public hostname rules on this tunnel (added once, in the da
   *.$DOMAIN   ->  HTTP  localhost:$NGINX_PORT
   app.$DOMAIN ->  HTTP  localhost:$NGINX_PORT
 
-Create a token, then log in from the machine you publish from:
-  $ROOT/bin/housepaged token create --data $DATA <name>
+Create your user (this prints its first token once; --superuser lets it create other users), then log in
+from the machine you publish from:
+  $ROOT/bin/housepaged user create --data $DATA --superuser <name>
   $ROOT/bin/housepage login --server $SCHEME://app.$DOMAIN --token <token>
 EOF

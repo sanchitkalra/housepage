@@ -16,15 +16,26 @@ const schema = `
 CREATE TABLE IF NOT EXISTS tokens (hash TEXT PRIMARY KEY, owner TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS sites  (name TEXT PRIMARY KEY, owner TEXT NOT NULL);`
 
-func openDB(dataDir string) (*sql.DB, error) {
-	if err := os.MkdirAll(dataDir, 0o755); err != nil {
-		return nil, err
-	}
-	db, err := sql.Open("sqlite", "file:"+filepath.Join(dataDir, "housepage.db")+"?_pragma=busy_timeout(5000)")
+// openSQLite opens the database file with the settings every connection needs. They are in the
+// connection string, not run once, because foreign_keys belongs to a connection and would be lost
+// whenever the pool opens a new one.
+func openSQLite(path string) (*sql.DB, error) {
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)")
 	if err != nil {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
+	return db, nil
+}
+
+func openDB(dataDir string) (*sql.DB, error) {
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		return nil, err
+	}
+	db, err := openSQLite(filepath.Join(dataDir, "housepage.db"))
+	if err != nil {
+		return nil, err
+	}
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, err

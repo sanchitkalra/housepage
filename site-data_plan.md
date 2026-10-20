@@ -97,18 +97,51 @@ Hardcoded in nginx for now, per visitor (needs `real_ip` behind the tunnel): abo
 
 ## Build order
 
-Each step ends with passing tests and a check-in before the next one.
+Fifteen small modules in three milestones. Each one ends with its tests passing and a stop for review. Nothing is committed unless asked. Sizes: S is under about 100 lines, M a few hundred, L the biggest pieces.
 
-| # | Build | Tests |
-|---|---|---|
-| 0 | Migration runner, users and tokens: numbered `.sql` files embedded in the binary and applied at startup, tracked with `PRAGMA user_version`. The baseline `0001_init.sql` creates the whole schema in the diagram. Foreign keys on, the `users` table with `is_superuser`, `tokens` with labels and their own `is_superuser` flag plus the triggers that guard it, `sites.owner_id`, the site cap checked inside the claim transaction, the operator commands (`user create`, `user set`, `token create`, `token list`, `token revoke`), the client commands `housepage token create|list|revoke`, and the API routes for users and tokens. Existing publish, list and delete keep their behaviour, now keyed by the user's id. | Migrations apply in order and exactly once (a second startup applies nothing), a failing migration rolls back and stops startup, and an old-schema development database gets the clear error. The 11th site is refused with 403 and a republish still works. Two concurrent claims cannot exceed the cap. Deleting a site frees a slot. Superuser tokens can only be created for superusers (the trigger rejects the rest), and demoting a user downgrades their superuser tokens. The minting rules hold: an ordinary token can mint only ordinary tokens for its own user, a superuser token can create users and mint for others, and the operator can do anything. Labels are unique per user. Listing never shows hashes or plaintext, a revoked token stops working at once, and revoking another user's token returns 404 (the operator can revoke any). A superuser token can change a limit and an ordinary token gets 403. |
-| 1 | `internal/rules`: collection and key name rules, sort-path rule, limit defaults and ceilings | Good and bad inputs for each rule |
-| 2 | `cmd/housepaged/docstore.go`: tables, `Get`, `Put`, `Insert` (small ULID generator, no new dependency), `Update` (`replace`), `Delete`, `List` with cursors, limit checks, derived counts | Insert-before-the-cursor gives no duplicates, nulls last, nested sort, cursor with mismatched sort is rejected, each cap, emptying a collection frees its slot, document size |
-| 3 | `cmd/housepaged/dbapi.go`: shared handlers, mode checks, JSON errors, both mounts | Per mode (off, open, owner) x per entry point x per route status code |
-| 4 | `db-config` routes and the CLI commands `db config` and `db show` | Setting, partial setting, ceilings, show output |
-| 5 | nginx: `/_api/` location, `X-Housepage-Site`, two rate-limit zones, in the `run.sh` template. Check with `--render-only` and `nginx -t` | A local end-to-end run through nginx like the earlier ones, including a spoofed header and the 429 |
-| 6 | `SKILL.md`: a data section so agents know how pages call the API | Agent run, as before |
-| 7 | README, `CLAUDE.md` and the closing hints printed by `run.sh` updated (the first run becomes `housepaged user create <name> --superuser`) | |
+### A. Accounts
+
+| # | Module | Delivers | Tests | Size |
+|---|---|---|---|---|
+| 1 | Migration runner | `migrate.go`: takes an `fs.FS` of numbered files, version check, `BEGIN IMMEDIATE`, pre-migration backup, `foreign_keys` off and on around the loop with `foreign_key_check`, a read-only status function. The connection string turns `foreign_keys` on. | Fixture migrations: fresh database, a second start applies nothing, a failure rolls back, gaps, a newer database, an old development database, two processes at once | M |
+| 2 | Baseline schema | `0001_init.sql` from `migrations_plan.md`, the `//go:embed`, the runner wired into `openDB` in place of the old `CREATE TABLE IF NOT EXISTS` string, and `housepaged migrate status` | Every table exists, the cascade works, the two superuser triggers hold, demotion downgrades tokens | S |
+| 3 | Users and tokens store | `db.go` functions to create, look up, list and revoke; user-name and label rules in `internal/rules` | Label uniqueness, a superuser token for an ordinary user is refused, revoking | M |
+| 4 | Operator commands | `housepaged user create/set`, `token create/list/revoke`, the default token minted with a new user | Command-level tests | M |
+| 5 | Publish API on users | `authenticate` returns the caller; publish, list and delete keyed by user id; the **site cap** inside the claim transaction | Existing tests adapted, the 11th site is refused, a republish still works, concurrent claims, deleting frees a slot | M |
+| 6 | Users and tokens API | `POST/GET/PUT /users`, `POST/GET/DELETE /tokens`, the JSON error helper | The whole minting matrix, the default token on user creation | L |
+| 7 | Client token commands | `housepage token create/list/revoke` | Against a fake server, like the existing client tests | S |
+
+Checkpoint: accounts are complete, the data API is not started.
+
+### B. The data API
+
+| # | Module | Delivers | Tests | Size |
+|---|---|---|---|---|
+| 8 | Data rules and cursor codec | Collection, key and sort-path rules, defaults and ceilings, cursor encode and decode (pure functions) | Good and bad inputs, round trips | S |
+| 9 | Document store, writes | ULID generator (no new dependency), get, put, insert, replace, delete, the derived cap checks, per-site settings | Each primitive, each cap, an emptied collection frees its slot, document size | L |
+| 10 | Document store, listing | Default order, `sort`, missing values last, cursors, `limit + 1` | Insert before the cursor gives no duplicates, nested sort, mismatched cursor, last page | L |
+| 11 | Data API handlers | Shared handlers, mode checks, JSON errors, both mounts (app host, and the site host with `X-Housepage-Site`) | Mode x entry point x route matrix | L |
+| 12 | Settings API and client | `GET/PUT db-config`, `housepage db config` and `db show` | Partial updates, ceilings, usage numbers | M |
+
+Checkpoint: the data API works through Go tests.
+
+### C. Edge, agents, docs
+
+| # | Module | Delivers | Tests | Size |
+|---|---|---|---|---|
+| 13 | nginx and `run.sh` | The `/_api/` location, the site header, rate-limit zones, JSON 429, the 16 KB body limit | `--render-only`, `nginx -t`, then a local end-to-end run through nginx including a spoofed header and the 429 | M |
+| 14 | Skill | A data section in `SKILL.md` | An agent run | S |
+| 15 | Docs and loose ends | README, `CLAUDE.md`, `run.sh`'s first-run hints (`user create --superuser`), the Code Tour artifact (stale after module 5) | | S |
+
+```
+1 -> 2 -> 3 -+-> 4
+             +-> 5 ----------------+
+             +-> 6 -> 7            |
+8 -> 9 -> 10 -> 11 <---------------+   (needs the caller from 5 and the store from 3)
+                 +-> 12 -> 13 -> 14 -> 15
+```
+
+Module 1 does not embed any files: a `//go:embed` pattern that matches nothing does not compile. The runner therefore takes an `fs.FS` and is tested with fixture files. The embed arrives with `0001_init.sql` in module 2.
 
 Decided: a user may revoke the token they are currently using (the CLI warns first, and the operator can always mint a new one), and only the operator can revoke other users' tokens, not a superuser.
 

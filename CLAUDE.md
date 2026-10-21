@@ -7,7 +7,7 @@ A personal playground for publishing static sites and PWAs. A site claims a name
 - **Do not make design decisions or unrequested changes.** Propose, get a yes, then build. This went wrong once already: an installer, Go changes and a config redesign were made unasked and had to be reverted. When a request is ambiguous, restate your understanding and confirm before coding.
 - **Never commit or push unless asked.** "Commit" does not mean "push".
 - Keep it simple: v0 first. Mark deliberate shortcuts with a `// ponytail:` comment naming the ceiling and the upgrade path.
-- The user knows Java and is new to Go. Explain Go idioms briefly when you introduce them. A private reading guide exists as an artifact ("Housepage Code Tour": https://claude.ai/artifact/Pcy77251F571bh5nwTNjiy). It mirrors the Go code as of commit `4f7f220` and is **out of date**: it predates users, tokens, migrations and the site data store.
+- The user knows Java and is new to Go. Explain Go idioms briefly when you introduce them.
 - Prefer tables and diagrams over paragraphs when explaining.
 
 ## Architecture

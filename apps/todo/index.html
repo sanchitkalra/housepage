@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=240">
+<title>To-do</title>
+<style>
+	* { box-sizing: border-box; }
+	html, body { margin: 0; width: 240px; height: 280px; overflow: hidden; background: #f6f3ea; color: #1e2733; font: 14px/1.2 system-ui, -apple-system, sans-serif; }
+	header { height: 24px; display: flex; justify-content: space-between; align-items: center; padding: 0 8px; background: #2f6fde; color: #fff; font-weight: 700; font-size: 13px; }
+	main { height: 256px; overflow-y: auto; scrollbar-width: none; }
+	main::-webkit-scrollbar { display: none; }
+	ul, ol { list-style: none; margin: 0; padding: 0; }
+	li { display: flex; gap: 6px; align-items: center; min-height: 28px; padding: 4px 8px; border-bottom: 1px solid #e3ddcf; }
+	li.sel { background: #2f6fde; color: #fff; border-color: #2f6fde; }
+	li .box { flex: none; width: 14px; text-align: center; }
+	li .text { overflow-wrap: anywhere; }
+	li.done .text { text-decoration: line-through; opacity: .6; }
+	li.sel.done .text { opacity: .85; }
+	.num { flex: none; width: 14px; font-weight: 700; opacity: .7; }
+	.empty { padding: 40px 16px; text-align: center; color: #6b665c; font-size: 13px; line-height: 1.5; }
+	.input { margin: 10px 8px; min-height: 64px; padding: 6px 8px; background: #fff; border: 2px solid #2f6fde; border-radius: 4px; overflow-wrap: anywhere; white-space: pre-wrap; }
+	.input u { text-decoration: none; background: #c9dafc; }
+	.caret { display: inline-block; width: 1px; height: 1em; vertical-align: text-bottom; background: currentColor; animation: blink 1s steps(1) infinite; }
+	@keyframes blink { 50% { opacity: 0; } }
+	.help { padding: 0 8px; color: #6b665c; font-size: 11px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<header><span id="title">To-do</span><span id="info"></span></header>
+<main id="main"></main>
+<script src="clunck-app.js"></script>
+<script>
+// To-do for the clunck phone. Tasks stay in this browser's localStorage only: nothing is sent anywhere.
+const STORE = "clunck-todo";
+const NAV = { 2: "up", 8: "down", 5: "ok" }; // outside text entry, the digit keys move like the arrows
+const main = document.getElementById("main");
+let tasks = load(), sel = 0, view = "list", optSel = 0, editing = -1;
+const input = clunck.multitap(render);
+
+function load() { try { return JSON.parse(localStorage.getItem(STORE)) || []; } catch { return []; } }
+function save() { try { localStorage.setItem(STORE, JSON.stringify(tasks)); } catch {} }
+
+function options() {
+	const o = [{ label: "Add task", run: () => edit(-1) }];
+	if (tasks.length) o.push({ label: "Edit", run: () => edit(sel) }, { label: "Delete", run: () => { tasks.splice(sel, 1); save(); } });
+	if (tasks.some((t) => t.done)) o.push({ label: "Clear done", run: () => { tasks = tasks.filter((t) => !t.done); save(); } });
+	return o;
+}
+
+function edit(i) { editing = i; input.set(i >= 0 ? tasks[i].text : ""); view = "edit"; }
+
+function saveEdit() {
+	const text = input.text.trim();
+	if (!text) return;
+	if (editing >= 0) tasks[editing].text = text;
+	else { tasks.push({ text, done: false }); sel = tasks.length - 1; }
+	save();
+	view = "list";
+}
+
+clunck.onKey((key, char) => {
+	if (view === "edit") {
+		if (key === "soft-left" || key === "ok") saveEdit();
+		else if (key === "back" || (key === "soft-right" && !input.text)) view = "list";
+		else if (key === "soft-right") return input.key("clear");
+		else return input.key(key, char); // input.key re-renders
+		return render();
+	}
+	key = NAV[key] || key;
+	if (view === "options") {
+		const o = options();
+		if (key === "up") optSel = (optSel - 1 + o.length) % o.length;
+		else if (key === "down") optSel = (optSel + 1) % o.length;
+		else if (key === "ok" || key === "soft-left") { view = "list"; o[optSel].run(); }
+		else if (/^[1-9]$/.test(key) && +key <= o.length) { view = "list"; o[+key - 1].run(); }
+		else if (key === "soft-right" || key === "back") view = "list";
+		return render();
+	}
+	if (key === "up") sel--;
+	else if (key === "down") sel++;
+	else if (key === "ok" && tasks[sel]) { tasks[sel].done = !tasks[sel].done; save(); }
+	else if (key === "soft-left") { view = "options"; optSel = 0; }
+	else if (key === "soft-right" || key === "back") return clunck.exit();
+	render();
+});
+
+function li(cls, ...parts) {
+	const el = document.createElement("li");
+	el.className = cls;
+	for (const [c, text] of parts) {
+		const span = document.createElement("span");
+		span.className = c;
+		span.textContent = text;
+		el.append(span);
+	}
+	return el;
+}
+
+function render() {
+	sel = Math.max(0, Math.min(sel, tasks.length - 1));
+	const title = document.getElementById("title"), info = document.getElementById("info");
+	if (view === "edit") {
+		title.textContent = editing >= 0 ? "Edit task" : "New task";
+		info.textContent = input.mode;
+		const box = document.createElement("div");
+		box.className = "input";
+		const text = input.text, pending = input.pending;
+		box.append(pending ? text.slice(0, -1) : text);
+		if (pending) { const u = document.createElement("u"); u.textContent = text.slice(-1); box.append(u); }
+		const caret = document.createElement("span");
+		caret.className = "caret";
+		box.append(caret);
+		const help = document.createElement("p");
+		help.className = "help";
+		help.textContent = "Tap a key again for the next letter. 0 is a space, # switches Abc / abc / ABC / 123.";
+		main.replaceChildren(box, help);
+		clunck.softkeys("Save", "", text ? "Clear" : "Back");
+		return;
+	}
+	if (view === "options") {
+		title.textContent = "Options";
+		info.textContent = "";
+		const ol = document.createElement("ol");
+		ol.append(...options().map((o, i) => li(i === optSel ? "sel" : "", ["num", i + 1], ["text", o.label])));
+		main.replaceChildren(ol);
+		clunck.softkeys("Select", "", "Back");
+		return;
+	}
+	const done = tasks.filter((t) => t.done).length;
+	title.textContent = "To-do";
+	info.textContent = tasks.length ? `${done}/${tasks.length}` : "";
+	if (!tasks.length) {
+		const p = document.createElement("p");
+		p.className = "empty";
+		p.textContent = "No tasks yet. Press Options, then Add task.";
+		main.replaceChildren(p);
+	} else {
+		const ul = document.createElement("ul");
+		ul.append(...tasks.map((t, i) => li((i === sel ? "sel" : "") + (t.done ? " done" : ""), ["box", t.done ? "☑" : "☐"], ["text", t.text])));
+		main.replaceChildren(ul);
+		ul.children[sel]?.scrollIntoView({ block: "nearest" });
+	}
+	clunck.softkeys("Options", tasks[sel] ? (tasks[sel].done ? "Undo" : "Done") : "", "Back");
+}
+
+render();
+</script>
+</body>
+</html>

@@ -161,6 +161,16 @@ http {
         location / { return 404 "no such page\n"; }
     }
 
+    # the homepage: <domain>  ->  <dataDir>/sites/home/, published like any other site.
+    # ponytail: the site name is fixed; make it a config field if it ever needs to change.
+    server {
+        listen 127.0.0.1:@NGINX_PORT@;
+        server_name @DOMAIN@;
+        root @DATA@/sites/home;
+        index index.html;
+        add_header Cache-Control "no-cache" always;
+    }
+
     # the sites: <name>.<domain>  ->  <dataDir>/sites/<name>/
     server {
         listen 127.0.0.1:@NGINX_PORT@;

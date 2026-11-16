@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=240">
+<title>Snake</title>
+<style>
+	html, body { margin: 0; background: #0d1321; overflow: hidden; }
+	canvas { display: block; width: 240px; height: 280px; }
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="Snake game"></canvas>
+<script src="clunck-app.js"></script>
+<script>
+// Snake for the clunck phone: 2/4/6/8 or arrows steer, 5 or OK starts and pauses. Walls end the game.
+const W = 240, H = 280, TOP = 26, CELL = 10, COLS = 24, ROWS = 25;
+const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+const OPPOSITE = { up: "down", down: "up", left: "right", right: "left" };
+const STEER = { 2: "up", 8: "down", 4: "left", 6: "right", up: "up", down: "down", left: "left", right: "right" };
+
+const canvas = document.getElementById("c");
+const dpr = window.devicePixelRatio || 1;
+canvas.width = W * dpr; canvas.height = H * dpr;
+const ctx = canvas.getContext("2d");
+ctx.scale(dpr, dpr);
+
+let snake, dir, queue, food, score, speed, timer = 0, phase = "ready";
+let best = 0;
+try { best = +localStorage.getItem("snake-best") || 0; } catch {}
+
+function reset() {
+	snake = [{ x: 12, y: 12 }, { x: 11, y: 12 }, { x: 10, y: 12 }];
+	dir = "right"; queue = []; score = 0; speed = 160;
+	placeFood();
+}
+
+// ponytail: retries random cells, which slows down only when the snake nearly fills the board
+function placeFood() {
+	do food = { x: Math.floor(Math.random() * COLS), y: Math.floor(Math.random() * ROWS) };
+	while (snake.some((s) => s.x === food.x && s.y === food.y));
+}
+
+function run() { clearInterval(timer); timer = setInterval(step, speed); }
+
+function step() {
+	if (queue.length) dir = queue.shift();
+	const [dx, dy] = DIRS[dir];
+	const head = { x: snake[0].x + dx, y: snake[0].y + dy };
+	const eats = head.x === food.x && head.y === food.y;
+	const body = eats ? snake : snake.slice(0, -1); // the tail moves away unless the snake grows
+	if (head.x < 0 || head.y < 0 || head.x >= COLS || head.y >= ROWS || body.some((s) => s.x === head.x && s.y === head.y)) {
+		return gameOver();
+	}
+	snake = [head, ...body];
+	if (eats) {
+		score++;
+		speed = Math.max(70, speed - 4);
+		clunck.beep(1320, 40);
+		placeFood();
+		run();
+	}
+	draw();
+}
+
+function gameOver() {
+	clearInterval(timer);
+	phase = "over";
+	clunck.beep(180, 250);
+	if (score > best) { best = score; try { localStorage.setItem("snake-best", best); } catch {} }
+	update();
+}
+
+function primary() { // the left soft key, OK and 5
+	if (phase === "ready" || phase === "over") { reset(); phase = "play"; run(); }
+	else if (phase === "play") { phase = "pause"; clearInterval(timer); }
+	else if (phase === "pause") { phase = "play"; run(); }
+	update();
+}
+
+function update() {
+	const label = { ready: "Start", play: "Pause", pause: "Resume", over: "Again" }[phase];
+	clunck.softkeys(label, "", "Back");
+	draw();
+}
+
+clunck.onKey((key) => {
+	if (key === "soft-left" || key === "ok" || key === "5") return primary();
+	if (key === "soft-right" || key === "back") { clearInterval(timer); if (phase === "play") phase = "pause"; return clunck.exit(); }
+	const turn = STEER[key];
+	if (phase !== "play" || !turn) return;
+	const last = queue.at(-1) || dir;
+	if (turn !== last && turn !== OPPOSITE[last] && queue.length < 2) queue.push(turn);
+});
+
+// drawing
+function cell(x, y, color, inset = 1) {
+	ctx.fillStyle = color;
+	ctx.beginPath();
+	ctx.roundRect(x * CELL + inset, TOP + y * CELL + inset, CELL - 2 * inset, CELL - 2 * inset, 2);
+	ctx.fill();
+}
+
+function draw() {
+	ctx.fillStyle = "#0d1321"; ctx.fillRect(0, 0, W, H);
+	ctx.fillStyle = "#16203a"; ctx.fillRect(0, TOP, COLS * CELL, ROWS * CELL);
+	ctx.fillStyle = "#e6edf5"; ctx.font = "bold 12px ui-monospace, Menlo, monospace"; ctx.textBaseline = "middle";
+	ctx.textAlign = "left"; ctx.fillText(`SCORE ${score ?? 0}`, 6, TOP / 2);
+	ctx.textAlign = "right"; ctx.fillText(`BEST ${best}`, W - 6, TOP / 2);
+	if (snake) {
+		cell(food.x, food.y, "#ff6b6b", 2);
+		snake.forEach((s, i) => cell(s.x, s.y, i === 0 ? "#c6f68d" : "#7bd148"));
+	}
+	const panel = {
+		ready: ["SNAKE", "Press 5 to start", "2 4 6 8 steer"],
+		pause: ["PAUSED", "Press 5 to resume"],
+		over: ["GAME OVER", `Score ${score}  ·  Best ${best}`, "Press 5 to play again"],
+	}[phase];
+	if (!panel) return;
+	ctx.fillStyle = "rgba(13, 19, 33, .82)"; ctx.fillRect(0, TOP, W, ROWS * CELL);
+	ctx.textAlign = "center";
+	panel.forEach((line, i) => {
+		ctx.fillStyle = i === 0 ? "#c6f68d" : "#e6edf5";
+		ctx.font = i === 0 ? "bold 22px ui-monospace, Menlo, monospace" : "12px ui-monospace, Menlo, monospace";
+		ctx.fillText(line, W / 2, TOP + 100 + i * 28);
+	});
+}
+
+score = 0;
+update();
+</script>
+</body>
+</html>

@@ -1,0 +1,107 @@
+:root { color-scheme: light dark; --page: #e8e4da; --hint: #6b665c; }
+@media (prefers-color-scheme: dark) { :root { --page: #15171c; --hint: #8a8f99; } }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; }
+body {
+	background: var(--page);
+	display: flex; flex-direction: column; align-items: center; justify-content: center;
+	overflow: hidden;
+	font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+	-webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+}
+#stage { position: relative; flex: none; }
+
+/* the handset */
+#phone {
+	position: absolute; top: 0; left: 0; transform-origin: 0 0;
+	width: 288px; padding: 16px 16px 24px;
+	border-radius: 44px 44px 54px 54px;
+	background: linear-gradient(160deg, #3a4d63, #1f2a38 60%, #18212c);
+	box-shadow: inset 0 2px 1px rgba(255, 255, 255, .15), inset 0 -3px 6px rgba(0, 0, 0, .4), 0 20px 40px rgba(0, 0, 0, .35);
+}
+.earpiece { width: 60px; height: 6px; margin: 0 auto 8px; border-radius: 3px; background: #0d131a; box-shadow: inset 0 1px 2px #000; }
+.brand { text-align: center; color: #c8d3df; font: 700 12px/1 system-ui, sans-serif; letter-spacing: .3em; margin-bottom: 9px; opacity: .8; }
+.bezel { background: #0b0f14; border-radius: 14px; padding: 10px 10px 12px; box-shadow: inset 0 0 0 2px #2c3846; }
+
+/* the screen: 240 x 320, of which the app gets 240 x 280 */
+#screen { width: 240px; height: 320px; display: flex; flex-direction: column; background: #000; overflow: hidden; border-radius: 3px; }
+#status, #softkeys { background: #0e1a2b; color: #e6edf5; flex: none; }
+#status { height: 18px; display: flex; align-items: center; justify-content: space-between; padding: 0 6px; font: 600 11px/1 system-ui, sans-serif; }
+.signal { display: flex; gap: 1px; align-items: flex-end; height: 10px; }
+.signal i { width: 3px; background: currentColor; }
+.signal i:nth-child(1) { height: 3px; } .signal i:nth-child(2) { height: 5px; } .signal i:nth-child(3) { height: 7px; } .signal i:nth-child(4) { height: 10px; }
+.battery { width: 18px; height: 9px; border: 1px solid currentColor; border-radius: 2px; position: relative; padding: 1px; }
+.battery::after { content: ""; position: absolute; right: -3px; top: 2px; width: 2px; height: 3px; background: currentColor; }
+.battery i { display: block; height: 100%; width: 75%; background: #7ee081; }
+#view { position: relative; height: 280px; flex: none; }
+#app { width: 240px; height: 280px; border: 0; display: block; background: #fff; }
+#loading { position: absolute; inset: 0; display: grid; place-items: center; color: #e6edf5; background: #0e1a2b; font: 600 13px system-ui, sans-serif; }
+#softkeys { height: 22px; display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: center; padding: 0 6px; font: 600 12px/1 system-ui, sans-serif; }
+#sk-center { text-align: center; }
+#sk-right { text-align: right; }
+
+#home {
+	height: 100%; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .4);
+	background: radial-gradient(circle at 30% 20%, #3fb6a8, #1f4f8a 55%, #182a52);
+	display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+#home-time { font: 700 48px/1 system-ui, sans-serif; letter-spacing: -.02em; }
+#home-date { margin-top: 6px; font-size: 13px; opacity: .9; }
+#home-name { margin-top: 20px; letter-spacing: .3em; font-size: 11px; opacity: .75; }
+
+#menu { height: 100%; background: linear-gradient(#f5f2ea, #e4ddcd); color: #1e2733; }
+#menu h2 { margin: 0; padding: 5px 8px; font: 700 13px system-ui, sans-serif; background: #2f6fde; color: #fff; }
+#grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 10px; }
+.tile { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0; border-radius: 8px; font: 600 11px system-ui, sans-serif; cursor: pointer; }
+.tile .icon { font-size: 30px; line-height: 1; }
+.tile.sel { background: #2f6fde; color: #fff; box-shadow: 0 2px 0 #1c4aa3; }
+
+/* the keypad */
+#keypad { margin-top: 16px; }
+#keypad button {
+	font: inherit; border: 0; cursor: pointer; touch-action: manipulation;
+	height: 36px; border-radius: 12px;
+	background: linear-gradient(#eef1f5, #c9d0d8); color: #1e2733;
+	box-shadow: 0 3px 0 #8b96a3, 0 4px 6px rgba(0, 0, 0, .3);
+	display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; line-height: 1;
+}
+#keypad button.down { transform: translateY(2px); box-shadow: 0 1px 0 #8b96a3, 0 1px 2px rgba(0, 0, 0, .3); }
+#keypad button:focus-visible { outline: 2px solid #7fb2ff; outline-offset: 2px; }
+.nav { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px 10px; margin-bottom: 14px; }
+#keypad .nav button { background: linear-gradient(#5a6d83, #3b4b5e); color: #e6edf5; box-shadow: 0 3px 0 #141c25, 0 4px 6px rgba(0, 0, 0, .35); font-size: 12px; }
+#keypad .nav button.down { box-shadow: 0 1px 0 #141c25; }
+#keypad .nav .soft span { width: 22px; height: 3px; border-radius: 2px; background: currentColor; opacity: .8; }
+#keypad .nav .ok { font-weight: 800; letter-spacing: .05em; }
+#keypad .nav .call { color: #7ee081; font-size: 18px; }
+#keypad .nav .end { color: #ff7a7a; font-size: 16px; }
+.digits { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px 10px; }
+.digits b { font-size: 17px; font-weight: 700; }
+.digits small { font-size: 8px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; opacity: .65; }
+
+#hint { margin: 12px 0 0; padding: 0 16px; max-width: 100%; color: var(--hint); font-size: 12px; text-align: center; flex: none; }
+@media (pointer: coarse) { #hint { display: none; } }
+
+/* On a phone the page is the handset: its colour runs edge to edge (under the status bar and the home
+   indicator when installed) and the outline goes. */
+/* On a phone the page fills the screen: the screen (scaled by shell.js) on a black surround at the top,
+   and the keypad stretched over the rest. */
+@media (max-width: 500px) {
+	/* one flat colour: a gradient on body stops short of the screen's bottom edge on iOS */
+	html, body { background: #1f2a38; overscroll-behavior: none; }
+	body { display: block; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+	#stage { width: 100%; height: 100%; }
+	#phone {
+		position: static; width: 100%; height: 100%; padding: 0; border-radius: 0;
+		background: transparent; box-shadow: none;
+		display: flex; flex-direction: column;
+	}
+	.earpiece, .brand { display: none; } /* the real phone is the top of the handset */
+	.bezel { flex: none; display: flex; justify-content: center; padding: 0; border-radius: 0; box-shadow: none; }
+	#screen { transform-origin: 0 0; border-radius: 0; }
+	#keypad { flex: 1; min-height: 0; margin: 0; padding: 12px 12px 6px; display: flex; flex-direction: column; gap: 12px; }
+	.nav { flex: 3; margin: 0; grid-auto-rows: 1fr; }
+	.digits { flex: 4; grid-auto-rows: 1fr; }
+	#keypad button { height: auto; }
+}
+#home-time small { font-size: 18px; font-weight: 700; margin-left: 4px; letter-spacing: 0; }

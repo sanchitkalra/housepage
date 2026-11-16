@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f2a38">
+<title>clunck</title>
+<meta name="description" content="A pocket phone of little apps.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="clunck">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="stylesheet" href="shell.css">
+</head>
+<body>
+<div id="stage">
+	<div id="phone">
+		<div class="earpiece"></div>
+		<div class="brand">clunck</div>
+		<div class="bezel"><div id="screen-box">
+			<div id="screen" role="application" aria-label="Phone screen">
+				<div id="status">
+					<span class="signal" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+					<span id="status-time"></span>
+					<span class="battery" aria-hidden="true"><i></i></span>
+				</div>
+				<div id="view">
+					<section id="home">
+						<div id="home-time"></div>
+						<div id="home-date"></div>
+						<div id="home-name">clunck</div>
+					</section>
+					<section id="menu" hidden>
+						<h2>Menu</h2>
+						<div id="grid"></div>
+					</section>
+					<iframe id="app" title="App" hidden></iframe>
+					<div id="loading" hidden>Loading…</div>
+				</div>
+				<div id="softkeys" aria-live="polite"><span id="sk-left"></span><span id="sk-center"></span><span id="sk-right"></span></div>
+			</div>
+		</div></div>
+		<div id="keypad">
+			<div class="nav">
+				<button data-key="soft-left" class="soft" aria-label="Left soft key"><span></span></button>
+				<button data-key="up" aria-label="Up">▲</button>
+				<button data-key="soft-right" class="soft" aria-label="Right soft key"><span></span></button>
+				<button data-key="left" aria-label="Left">◀</button>
+				<button data-key="ok" class="ok" aria-label="OK">OK</button>
+				<button data-key="right" aria-label="Right">▶</button>
+				<button data-key="ok" class="call" aria-label="Call">✆</button>
+				<button data-key="down" aria-label="Down">▼</button>
+				<button data-key="end" class="end" aria-label="End: back to the menu">⏻</button>
+			</div>
+			<div class="digits"></div>
+		</div>
+	</div>
+</div>
+<p id="hint">Keyboard: arrows · Enter = OK · 0–9, * and # · [ and ] = soft keys · Esc = back · Backspace = clear · End = close the app</p>
+<script src="clunck-app.js"></script>
+<script src="shell.js"></script>
+</body>
+</html>

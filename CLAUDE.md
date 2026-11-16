@@ -72,6 +72,8 @@ go build -o bin/housepage  ./cmd/housepage
 
 Ideas the user has not asked for yet, so do not build unprompted: atomic publish via symlink swap (v0 is wipe-then-write), a dashboard on a separate registrable domain, zip upload, and the data store's future work listed in `site-data_plan.md` (`increment` and `merge` updates, indexes, per-collection access rules, private reads, realtime, per-site rate limits).
 
+Proxy sites (the user prefers this design over the alternatives, but it is not planned): a name forwards to a local port instead of serving files, so e.g. a branch-preview app gets persistent URLs (`feat-x.<domain>` → `localhost:9001`). The registry lives in housepage's DB and housepaged forwards with `httputil.ReverseProxy`. Constraints found while discussing it: superuser only; ports limited to a range in the config and never housepage's own ports; strip the visitor's `X-Housepage-Site`; WebSocket `Upgrade` headers and a larger body limit than `/_api/`'s 16 KB; proxy and site names share one namespace. Main caveat: `localhost` is the machine housepage runs on, so it only works while the target app runs on the same host. Rejected alternatives: routing a name prefix (`pr-*`) to one port, with the registry in the target app; and housepaged writing an nginx map and reloading nginx.
+
 ## Gotchas learned
 
 - Go's `multipart.Part.FileName()` strips directories, so `css/app.css` would become `app.css`. `readFiles` parses `Content-Disposition` itself.
